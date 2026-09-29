@@ -1,5 +1,6 @@
 import json
 from typing import Any
+from urllib.parse import urlparse
 
 from moto.core.responses import TYPE_RESPONSE, ActionResult, BaseResponse, EmptyResult
 from moto.utilities.utils import load_resource
@@ -650,4 +651,40 @@ class CognitoIdpJsonWebKeyResponse(BaseResponse):
             200,
             {"Content-Type": "application/json"},
             CognitoIdpJsonWebKeyResponse.json_web_key,
+        )
+
+    @staticmethod
+    def serve_openid_configuration(*args) -> TYPE_RESPONSE:  # type: ignore
+        full_url = args[1]
+        parsed = urlparse(full_url)
+        user_pool_id = parsed.path.strip("/").split("/")[0]
+        region = user_pool_id.rsplit("_", 1)[0] if "_" in user_pool_id else "us-east-1"
+
+        # Matches the "iss" claim UserPool.create_jwt() puts in every token, so a
+        # client that checks a token's issuer against this document's issuer sees
+        # the same value either way.
+        issuer = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}"
+
+        # jwks_uri/token_endpoint/userinfo_endpoint are built from the URL this
+        # request actually arrived on, not from the AWS-style issuer above: in
+        # decorator mode that URL already is the AWS host, and in ServerMode it's
+        # whatever host/port the caller used to reach this server, which is the
+        # only address that's actually reachable from there - the same address
+        # serve_json_web_key's own endpoint already relies on being reachable at.
+        base = f"{parsed.scheme}://{parsed.netloc}/{user_pool_id}"
+
+        config = {
+            "issuer": issuer,
+            "jwks_uri": f"{base}/.well-known/jwks.json",
+            "token_endpoint": f"{base}/oauth2/token",
+            "userinfo_endpoint": f"{base}/oauth2/userinfo",
+            "subject_types_supported": ["public", "pairwise"],
+            "grant_types_supported": ["authorization_code"],
+            "id_token_signing_alg_values_supported": ["RS256"],
+        }
+
+        return (
+            200,
+            {"Content-Type": "application/json"},
+            json.dumps(config),
         )

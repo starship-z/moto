@@ -322,10 +322,14 @@ class DomainDispatcherApplication:
         # prefix (e.g., "us-east-1" from "us-east-1_abc123") as a service name.
         #
         # Some unsigned GET requests can be routed based on the URL path alone.
-        # For example, Cognito JWKS endpoint:
+        # For example, Cognito JWKS and OIDC discovery endpoints:
         #   GET /{user_pool_id}/.well-known/jwks.json
+        #   GET /{user_pool_id}/.well-known/openid-configuration
         # The user_pool_id starts with the region (e.g. us-east-1_abc123).
-        if path_info.rstrip("/").endswith("/.well-known/jwks.json"):
+        stripped_path = path_info.rstrip("/")
+        if stripped_path.endswith(
+            ("/.well-known/jwks.json", "/.well-known/openid-configuration")
+        ):
             # Extract region from user pool ID (format: {region}_{id})
             pool_id = path_info.strip("/").split("/")[0]
             if "_" not in pool_id:

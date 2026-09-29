@@ -340,6 +340,54 @@ def test_jwks_endpoint_post_rejected(moto_server_url: str):
     assert response.status_code != 500
 
 
+def test_openid_configuration_endpoint_without_auth_header():
+    """Test that the discovery endpoint works directly on the cognitoidp backend."""
+    backend = server.create_backend_app("cognito-idp")
+    test_client = backend.test_client()
+
+    res = test_client.get("/us-east-1_abc123/.well-known/openid-configuration")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert (
+        data["issuer"] == "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_abc123"
+    )
+    assert "jwks_uri" in data
+    assert "token_endpoint" in data
+    assert "userinfo_endpoint" in data
+
+
+def test_openid_configuration_endpoint_on_moto_server(moto_server_url: str):
+    """A plain GET to /{pool_id}/.well-known/openid-configuration should return a
+    discovery document without requiring an Authorization header, the same way
+    /{pool_id}/.well-known/jwks.json does (see the regression tests for
+    https://github.com/getmoto/moto/issues/9570 above) - and the endpoints it
+    advertises should actually be reachable at this server, not just at the
+    AWS-style issuer host.
+    """
+    pool_id = "us-east-1_abc123"
+    url = f"{moto_server_url}/{pool_id}/.well-known/openid-configuration"
+    response = requests.get(url)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["issuer"] == f"https://cognito-idp.us-east-1.amazonaws.com/{pool_id}"
+    assert data["jwks_uri"] == f"{moto_server_url}/{pool_id}/.well-known/jwks.json"
+
+    jwks_response = requests.get(data["jwks_uri"])
+    assert jwks_response.status_code == 200
+    assert "keys" in jwks_response.json()
+
+
+def test_openid_configuration_endpoint_non_us_east_1_region(moto_server_url: str):
+    """Discovery endpoint should route correctly for pools in any region."""
+    url = f"{moto_server_url}/eu-west-1_xyz789/.well-known/openid-configuration"
+    response = requests.get(url)
+    assert response.status_code == 200
+    data = response.json()
+    assert (
+        data["issuer"] == "https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_xyz789"
+    )
+
+
 class TestGetServiceFromUnsignedPath:
     """Unit tests for DomainDispatcherApplication.get_service_from_unsigned_path."""
 
@@ -384,3 +432,24 @@ class TestGetServiceFromUnsignedPath:
         assert service == "cognito-idp"
         # .well-known has no underscore, so falls back to us-east-1
         assert region == "us-east-1"
+
+    def test_openid_configuration_path_with_valid_pool_id(self):
+        service, region = self.method(
+            "/us-east-1_abc123/.well-known/openid-configuration"
+        )
+        assert service == "cognito-idp"
+        assert region == "us-east-1"
+
+    def test_openid_configuration_path_with_different_region(self):
+        service, region = self.method(
+            "/eu-west-1_xyz789/.well-known/openid-configuration"
+        )
+        assert service == "cognito-idp"
+        assert region == "eu-west-1"
+
+    def test_openid_configuration_path_with_trailing_slash(self):
+        service, region = self.method(
+            "/us-west-2_pool123/.well-known/openid-configuration/"
+        )
+        assert service == "cognito-idp"
+        assert region == "us-west-2"
