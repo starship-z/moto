@@ -196,6 +196,16 @@ def get_cognito_idp_user_pool_enable_totp() -> bool:
     )
 
 
+def get_cognito_idp_issuer_base_url() -> str | None:
+    # Every issued token's "iss" claim is normally the real AWS-style
+    # https://cognito-idp.{region}.amazonaws.com host, which is never actually
+    # reachable from a ServerMode deployment (it isn't real AWS). Setting this lets
+    # server-mode users point tokens' issuer - and the matching OIDC discovery
+    # document's issuer - at wherever this server is actually reachable instead,
+    # without changing the default AWS-style behaviour for anyone else.
+    return os.environ.get("MOTO_COGNITO_IDP_ISSUER_BASE_URL")
+
+
 def enable_iso_regions() -> bool:
     return os.environ.get("MOTO_ENABLE_ISO_REGIONS", "false").lower() == "true"
 

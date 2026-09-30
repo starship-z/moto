@@ -13,6 +13,7 @@ from .models import (
     cognitoidp_backends,
     find_account_region_by_value,
 )
+from .utils import issuer_url
 
 
 class CognitoIdpResponse(BaseResponse):
@@ -660,10 +661,11 @@ class CognitoIdpJsonWebKeyResponse(BaseResponse):
         user_pool_id = parsed.path.strip("/").split("/")[0]
         region = user_pool_id.rsplit("_", 1)[0] if "_" in user_pool_id else "us-east-1"
 
-        # Matches the "iss" claim UserPool.create_jwt() puts in every token, so a
-        # client that checks a token's issuer against this document's issuer sees
-        # the same value either way.
-        issuer = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}"
+        # Same function UserPool.create_jwt() uses for the "iss" claim it puts in
+        # every token, so a client that checks a token's issuer against this
+        # document's issuer sees the same value either way - including when
+        # MOTO_COGNITO_IDP_ISSUER_BASE_URL overrides the default AWS-style host.
+        issuer = issuer_url(region, user_pool_id)
 
         # jwks_uri/token_endpoint/userinfo_endpoint are built from the URL this
         # request actually arrived on, not from the AWS-style issuer above: in

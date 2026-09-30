@@ -1,10 +1,13 @@
 import json
+import os
 from collections.abc import Iterable
+from unittest import SkipTest, mock
 
 import pytest
 import requests
 
 import moto.server as server
+from moto import settings
 from moto.server import ThreadedMotoServer
 
 
@@ -386,6 +389,28 @@ def test_openid_configuration_endpoint_non_us_east_1_region(moto_server_url: str
     assert (
         data["issuer"] == "https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_xyz789"
     )
+
+
+@mock.patch.dict(
+    os.environ, {"MOTO_COGNITO_IDP_ISSUER_BASE_URL": "http://localhost:5000"}
+)
+def test_openid_configuration_endpoint_issuer_override():
+    """MOTO_COGNITO_IDP_ISSUER_BASE_URL overrides the discovery document's issuer
+    the same way it overrides create_jwt()'s "iss" claim (see
+    test_cognitoidp.test_token_issuer_override) - the two are never set
+    independently, since a mismatch between them is exactly the bug this whole
+    endpoint exists to avoid.
+    """
+    if settings.TEST_SERVER_MODE:
+        raise SkipTest("Cannot set environment variables in ServerMode")
+
+    backend = server.create_backend_app("cognito-idp")
+    test_client = backend.test_client()
+
+    res = test_client.get("/us-east-1_abc123/.well-known/openid-configuration")
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data["issuer"] == "http://localhost:5000/us-east-1_abc123"
 
 
 class TestGetServiceFromUnsignedPath:

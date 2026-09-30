@@ -41,6 +41,7 @@ from .utils import (
     expand_attrs,
     flatten_attrs,
     generate_id,
+    issuer_url,
     validate_username_format,
     verify_totp,
 )
@@ -540,7 +541,7 @@ class CognitoIdpUserPool(BaseModel):
     ) -> tuple[str, int]:
         now = int(time.time())
         payload = {
-            "iss": f"https://cognito-idp.{self.region}.amazonaws.com/{self.id}",
+            "iss": issuer_url(self.region, self.id),
             "sub": self._get_user(username).id,
             "client_id" if token_use == "access" else "aud": client_id,
             "token_use": token_use,

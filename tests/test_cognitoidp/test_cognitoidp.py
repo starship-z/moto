@@ -3555,6 +3555,31 @@ def test_token_legitimacy():
 
 
 @mock_aws
+@mock.patch.dict(
+    os.environ, {"MOTO_COGNITO_IDP_ISSUER_BASE_URL": "http://localhost:5000"}
+)
+def test_token_issuer_override():
+    """MOTO_COGNITO_IDP_ISSUER_BASE_URL overrides the default AWS-style issuer -
+    for ServerMode users, where that default host is never actually reachable.
+    """
+    if settings.TEST_SERVER_MODE:
+        raise SkipTest("Cannot set environment variables in ServerMode")
+
+    conn = boto3.client("cognito-idp", "us-west-2")
+
+    public_key = load_resource("cognitoidp/resources/jwks-public.json")
+    json_web_key = jwk.RSAKey.import_key(public_key["keys"][0])
+
+    outputs = authentication_flow(conn, "ADMIN_NO_SRP_AUTH")
+    issuer = f"http://localhost:5000/{outputs['user_pool_id']}"
+
+    id_claims = jwt.decode(outputs["id_token"], json_web_key, ["RS256"]).claims
+    assert id_claims["iss"] == issuer
+    access_claims = jwt.decode(outputs["access_token"], json_web_key, ["RS256"]).claims
+    assert access_claims["iss"] == issuer
+
+
+@mock_aws
 def test_change_password():
     conn = boto3.client("cognito-idp", "us-west-2")
 

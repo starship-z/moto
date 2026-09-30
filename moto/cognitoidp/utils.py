@@ -12,10 +12,27 @@ from cryptography.hazmat.primitives.twofactor.totp import TOTP
 
 from moto.moto_api._internal import mock_random as random
 
+from ..settings import get_cognito_idp_issuer_base_url
+
 FORMATS = {
     "email": r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
     "phone_number": r"\+\d{,15}",
 }
+
+
+def issuer_url(region: str, user_pool_id: str) -> str:
+    """The "iss" claim every token for this pool carries, and the "issuer" the
+    pool's OIDC discovery document advertises - kept as one function so the two
+    can never drift apart.
+
+    Defaults to the real AWS-style host, matching actual Cognito. Server-mode
+    users, where that host is never actually reachable, can override it with
+    MOTO_COGNITO_IDP_ISSUER_BASE_URL to wherever this server is really reachable.
+    """
+    base_url = get_cognito_idp_issuer_base_url()
+    if base_url:
+        return f"{base_url}/{user_pool_id}"
+    return f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}"
 
 
 PAGINATION_MODEL = {
